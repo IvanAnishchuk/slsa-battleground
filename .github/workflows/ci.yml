@@ -1,0 +1,320 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REPORTS_DIR: .reports
+
+jobs:
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v4.2.0
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen --dev
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit on all files
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: no-commit-to-branch
+
+  lint:
+    name: Lint & format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v4.2.0
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen --dev
+
+      - name: Prepare reports directory
+        run: mkdir -p "${REPORTS_DIR}/lint"
+
+      - name: Ruff check (SARIF + text)
+        run: |
+          set +e
+          uv run ruff check --output-format=sarif \
+            --output-file="${REPORTS_DIR}/lint/ruff.sarif" src/ tests/
+          echo "ruff_exit=$?" >> "$GITHUB_ENV"
+          uv run ruff check --output-format=github src/ tests/ \
+            | tee "${REPORTS_DIR}/lint/ruff.log" || true
+
+      - name: Ruff format check
+        run: |
+          uv run ruff format --check --diff src/ tests/ \
+            | tee "${REPORTS_DIR}/lint/ruff-format.log" || true
+
+      - name: Upload Ruff SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v3.27.5
+        with:
+          sarif_file: .reports/lint/ruff.sarif
+          category: ruff
+
+      - name: Upload lint logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lint-logs
+          path: .reports/lint/
+          retention-days: 14
+
+      - name: Fail if ruff found issues
+        run: |
+          if [ "${ruff_exit:-0}" != "0" ]; then
+            echo "Ruff reported issues."
+            exit 1
+          fi
+
+  security-lint:
+    name: Security lint (S rules)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v4.2.0
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen --dev
+
+      - name: Prepare reports directory
+        run: mkdir -p "${REPORTS_DIR}/security-lint"
+
+      - name: Ruff security-only scan (SARIF)
+        run: |
+          uv run ruff check \
+            --select S,BLE,TRY \
+            --output-format=sarif \
+            --output-file="${REPORTS_DIR}/security-lint/ruff-security.sarif" \
+            src/ || true
+
+      - name: Upload security SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v3.27.5
+        with:
+          sarif_file: .reports/security-lint/ruff-security.sarif
+          category: ruff-security
+
+      - name: Upload security lint logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: security-lint-logs
+          path: .reports/security-lint/
+          retention-days: 30
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v4.2.0
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen --dev
+
+      - name: ty check
+        run: uv run ty check
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: write
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: true
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v4.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - run: uv sync --frozen --dev
+
+      - name: Run pytest
+        id: pytest
+        run: |
+          mkdir -p .reports/test
+          set +e
+          uv run pytest tests/ -v 2>&1 | tee .reports/test/pytest.log
+          echo "exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+        continue-on-error: true
+
+      - name: Publish test results
+        if: always() && github.event_name == 'pull_request'
+        uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040 # v2.23.0
+        with:
+          files: .reports/test/test-results.xml
+          check_name: "Pytest report (${{ matrix.python-version }})"
+
+      - name: Coverage comment + badge
+        if: matrix.python-version == '3.13'
+        uses: py-cov-action/python-coverage-comment-action@7188638f871f721a365d644f505d1ff3df20d683 # v3.40
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERAGE_DATA_BRANCH: python-coverage-comment-action-data
+          MINIMUM_GREEN: 90
+          MINIMUM_ORANGE: 75
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: .reports/test/
+          retention-days: 14
+
+      - name: Fail if tests did not pass
+        if: steps.pytest.outputs.exit != '0'
+        run: exit 1
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v4.2.0
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen --dev
+
+      - name: Run supply-chain audit
+        run: uv run python scripts/audit.py
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-audit
+          path: .reports/audit/
+          retention-days: 90
+
+  osv-scan:
+    name: OSV scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run OSV-Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@eb5b619bb565d10623076caba5263750fde3c790 # main
+        with:
+          scan-args: |-
+            --output=osv-results.sarif
+            --format=sarif
+            --recursive
+            ./
+        continue-on-error: true
+
+      - name: Upload OSV SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v3.27.5
+        with:
+          sarif_file: osv-results.sarif
+          category: osv-scanner
