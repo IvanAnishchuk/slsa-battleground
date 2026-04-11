@@ -52,7 +52,11 @@ def file_sha256(path: Path) -> str:
 
 def run_capture(cmd: list[str]) -> tuple[int, str]:
     result = subprocess.run(  # noqa: S603
-        cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False,
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        check=False,
     )
     return result.returncode, (result.stdout or "") + (result.stderr or "")
 
@@ -119,11 +123,22 @@ def main() -> int:  # noqa: C901
 
     step(5, "CycloneDX SBOM (prod)")
     sbom = REPORTS_DIR / "sbom.cdx.json"
-    code, out = run_capture([
-        "uv", "tool", "run", "--from", "cyclonedx-bom", "cyclonedx-py",
-        "requirements", str(PROD_REQ),
-        "--output-format", "json", "--output-file", str(sbom),
-    ])
+    code, out = run_capture(
+        [
+            "uv",
+            "tool",
+            "run",
+            "--from",
+            "cyclonedx-bom",
+            "cyclonedx-py",
+            "requirements",
+            str(PROD_REQ),
+            "--output-format",
+            "json",
+            "--output-file",
+            str(sbom),
+        ]
+    )
     if code != 0:
         console.print(out)
         fail("cyclonedx-py failed for prod")
@@ -132,11 +147,22 @@ def main() -> int:  # noqa: C901
 
     step(6, "CycloneDX SBOM (prod + dev)")
     sbom_dev = REPORTS_DIR / "sbom-dev.cdx.json"
-    code, out = run_capture([
-        "uv", "tool", "run", "--from", "cyclonedx-bom", "cyclonedx-py",
-        "requirements", str(DEV_REQ),
-        "--output-format", "json", "--output-file", str(sbom_dev),
-    ])
+    code, out = run_capture(
+        [
+            "uv",
+            "tool",
+            "run",
+            "--from",
+            "cyclonedx-bom",
+            "cyclonedx-py",
+            "requirements",
+            str(DEV_REQ),
+            "--output-format",
+            "json",
+            "--output-file",
+            str(sbom_dev),
+        ]
+    )
     if code != 0:
         console.print(out)
         fail("cyclonedx-py failed for dev")

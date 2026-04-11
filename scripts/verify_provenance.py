@@ -50,7 +50,11 @@ def sha256(path: Path) -> str:
 
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603
-        cmd, capture_output=True, text=True, check=False, **kwargs,
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+        **kwargs,
     )
 
 
@@ -77,6 +81,7 @@ def info(msg: str) -> None:
 
 
 # ── Collectors ────────────────────────────────────────────────────
+
 
 def collect_local(version: str) -> dict[str, Path]:
     """Find matching artifacts in local dist/."""
@@ -108,20 +113,34 @@ def download_github_release(version: str, dest: Path) -> dict[str, Path]:
 
 def download_pypi(version: str, dest: Path) -> dict[str, Path]:
     """Download package from PyPI."""
-    result = run([
-        "pip", "download", "--no-deps", "--dest", str(dest),
-        f"{PACKAGE_NAME}=={version}",
-    ])
+    result = run(
+        [
+            "pip",
+            "download",
+            "--no-deps",
+            "--dest",
+            str(dest),
+            f"{PACKAGE_NAME}=={version}",
+        ]
+    )
     if result.returncode != 0:
         console.print(f"  [yellow]PyPI download failed for {PACKAGE_NAME}=={version}[/]")
         if result.stderr:
             info(result.stderr.strip())
         return {}
     # Also try sdist
-    run([
-        "pip", "download", "--no-deps", "--no-binary", ":all:", "--dest", str(dest),
-        f"{PACKAGE_NAME}=={version}",
-    ])
+    run(
+        [
+            "pip",
+            "download",
+            "--no-deps",
+            "--no-binary",
+            ":all:",
+            "--dest",
+            str(dest),
+            f"{PACKAGE_NAME}=={version}",
+        ]
+    )
     found = {}
     for f in sorted(dest.iterdir()):
         if is_dist_file(f.name):
@@ -130,6 +149,7 @@ def download_pypi(version: str, dest: Path) -> dict[str, Path]:
 
 
 # ── Verification ──────────────────────────────────────────────────
+
 
 def verify_checksums(artifacts: dict[str, Path], sums_file: Path | None) -> bool:
     """Verify SHA256SUMS.txt if present, print hashes either way."""
@@ -156,7 +176,18 @@ def verify_checksums(artifacts: dict[str, Path], sums_file: Path | None) -> bool
 
 def verify_gh_attestation(path: Path) -> dict | None:
     """Run gh attestation verify and return parsed provenance."""
-    result = run(["gh", "attestation", "verify", str(path), "--repo", REPO_SLUG, "--format", "json"])
+    result = run(
+        [
+            "gh",
+            "attestation",
+            "verify",
+            str(path),
+            "--repo",
+            REPO_SLUG,
+            "--format",
+            "json",
+        ]
+    )
     if result.returncode != 0:
         fail(f"gh attestation verify: {result.stderr.strip()}")
         return None
@@ -176,14 +207,23 @@ def verify_sigstore(path: Path, bundle: Path | None) -> bool:
         info(f"sigstore: no bundle for {path.name}")
         return True  # not a failure, just not available
 
-    result = run([
-        "uv", "tool", "run", "sigstore", "verify", "identity",
-        "--cert-identity-regexp",
-        f"^https://github\\.com/{REPO_OWNER}/{REPO_NAME}/\\.github/workflows/release\\.yml@",
-        "--cert-oidc-issuer", "https://token.actions.githubusercontent.com",
-        "--bundle", str(bundle),
-        str(path),
-    ])
+    result = run(
+        [
+            "uv",
+            "tool",
+            "run",
+            "sigstore",
+            "verify",
+            "identity",
+            "--cert-identity-regexp",
+            f"^https://github\\.com/{REPO_OWNER}/{REPO_NAME}/\\.github/workflows/release\\.yml@",
+            "--cert-oidc-issuer",
+            "https://token.actions.githubusercontent.com",
+            "--bundle",
+            str(bundle),
+            str(path),
+        ]
+    )
     if result.returncode != 0:
         fail(f"sigstore verify: {result.stderr.strip()}")
         return False
@@ -259,6 +299,7 @@ def print_provenance_details(attestation: dict) -> None:
 
 # ── Cross-source comparison ───────────────────────────────────────
 
+
 def compare_hashes(sources: dict[str, dict[str, str]]) -> bool:
     """Compare artifact hashes across distribution sources."""
     all_names: set[str] = set()
@@ -295,6 +336,7 @@ def compare_hashes(sources: dict[str, dict[str, str]]) -> bool:
 
 # ── Main ──────────────────────────────────────────────────────────
 
+
 def main() -> int:
     version = get_version()
     console.print(Panel(f"Verifying provenance for [bold]{PACKAGE_NAME} {version}[/]"))
@@ -310,7 +352,7 @@ def main() -> int:
         local_sums = REPO_ROOT / "dist" / "SHA256SUMS.txt"
         verify_checksums(local, local_sums if local_sums.exists() else None)
         source_hashes["local"] = {n: sha256(p) for n, p in local.items()}
-        for name, path in local.items():
+        for _name, path in local.items():
             bundle = path.parent / f"{path.name}.sigstore.json"
             verify_sigstore(path, bundle)
     else:
@@ -330,7 +372,7 @@ def main() -> int:
             verify_checksums(gh_artifacts, gh_sums)
             source_hashes["github"] = {n: sha256(p) for n, p in gh_artifacts.items()}
             attestation_shown = False
-            for name, path in gh_artifacts.items():
+            for _name, path in gh_artifacts.items():
                 att = verify_gh_attestation(path)
                 if att and not attestation_shown:
                     print_provenance_details(att)
@@ -351,7 +393,7 @@ def main() -> int:
             for name in sorted(pypi_artifacts):
                 h = source_hashes["pypi"][name]
                 info(f"{name}: {h}")
-            for name, path in pypi_artifacts.items():
+            for _name, path in pypi_artifacts.items():
                 verify_gh_attestation(path)
         else:
             info("No PyPI artifacts available")

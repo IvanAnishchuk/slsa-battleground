@@ -28,7 +28,13 @@ def version_callback(value: bool) -> None:
 def main(
     _version: Annotated[
         bool,
-        typer.Option("--version", "-V", callback=version_callback, is_eager=True, help="Show version and exit."),
+        typer.Option(
+            "--version",
+            "-V",
+            callback=version_callback,
+            is_eager=True,
+            help="Show version and exit.",
+        ),
     ] = False,
 ) -> None:
     """Minimal package for testing SLSA provenance in GitHub Actions."""
@@ -37,7 +43,9 @@ def main(
 @app.command()
 def hello(
     name: Annotated[str, typer.Argument(help="Name to greet.")] = "world",
-    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose output.")] = False,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Enable verbose output.")
+    ] = False,
 ) -> None:
     """Say hello (placeholder command)."""
     if verbose:
