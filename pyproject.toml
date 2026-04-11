@@ -1,6 +1,6 @@
 [project]
 name = "slsa-battleground"
-version = "0.0.1"
+version = "0.0.2"
 description = "Minimal package for testing SLSA provenance in GitHub Actions"
 readme = "README.md"
 license = "CC0-1.0"

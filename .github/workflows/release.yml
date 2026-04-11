@@ -199,4 +199,4 @@ jobs:
             release-dist/*.tar.gz
             release-dist/*-sbom.cdx.json
             release-dist/SHA256SUMS.txt
-            release-dist/*.sigstore
+            release-dist/*.sigstore.json

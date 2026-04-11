@@ -48,7 +48,7 @@ All releases are:
 uv tool run sigstore verify identity \
     --cert-identity-regexp '^https://github\.com/IvanAnishchuk/slsa-battleground/\.github/workflows/release\.yml@' \
     --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
-    --bundle slsa-battleground-*.whl.sigstore \
+    --bundle slsa-battleground-*.whl.sigstore.json \
     slsa-battleground-*.whl
 
 # Verify GitHub attestation
