@@ -46,10 +46,10 @@ All releases are:
 ```sh
 # Verify sigstore signature
 uv tool run sigstore verify identity \
-    --cert-identity-regexp '^https://github\.com/IvanAnishchuk/slsa-battleground/\.github/workflows/release\.yml@' \
+    --cert-identity 'https://github.com/IvanAnishchuk/slsa-battleground/.github/workflows/release.yml@refs/tags/vVERSION' \
     --cert-oidc-issuer 'https://token.actions.githubusercontent.com' \
-    --bundle slsa-battleground-*.whl.sigstore.json \
-    slsa-battleground-*.whl
+    --bundle slsa_battleground-VERSION-py3-none-any.whl.sigstore.json \
+    slsa_battleground-VERSION-py3-none-any.whl
 
 # Verify GitHub attestation
 gh attestation verify slsa-battleground-*.whl --owner IvanAnishchuk

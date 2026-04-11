@@ -201,11 +201,57 @@ def verify_gh_attestation(path: Path) -> dict | None:
     return None
 
 
+def _current_version() -> str:
+    """Read version from __init__.py."""
+    init = REPO_ROOT / "src" / "slsa_battleground" / "__init__.py"
+    for line in init.read_text().splitlines():
+        if line.startswith("__version__"):
+            return line.split('"')[1]
+    return "0.0.0"
+
+
+def _extract_san_from_bundle(bundle_path: Path) -> str | None:
+    """Extract the Subject Alternative Name from a sigstore bundle's certificate."""
+    try:
+        bundle_data = json.loads(bundle_path.read_text(encoding="utf-8"))
+        cert_b64 = (
+            bundle_data.get("verificationMaterial", {}).get("certificate", {}).get("rawBytes", "")
+        )
+        if not cert_b64:
+            return None
+        # Parse the SAN from the DER certificate using openssl
+        cert_pem = "-----BEGIN CERTIFICATE-----\n" + cert_b64 + "\n-----END CERTIFICATE-----\n"
+        result = run(
+            ["openssl", "x509", "-noout", "-ext", "subjectAltName"],
+            input=cert_pem,
+        )
+        if result.returncode != 0:
+            return None
+        # Parse "URI:" entries from the SAN output
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("URI:"):
+                return line.removeprefix("URI:")
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return None
+
+
 def verify_sigstore(path: Path, bundle: Path | None) -> bool:
     """Verify sigstore signature if bundle is available."""
     if not bundle or not bundle.exists():
         info(f"sigstore: no bundle for {path.name}")
         return True  # not a failure, just not available
+
+    # Determine the cert-identity from the bundle's certificate SAN
+    # The exact SAN includes the tag ref, so we read it from the bundle
+    san = _extract_san_from_bundle(bundle)
+    if not san:
+        # Fallback: construct the expected identity for the current version
+        san = (
+            f"https://github.com/{REPO_OWNER}/{REPO_NAME}"
+            f"/.github/workflows/release.yml@refs/tags/v{_current_version()}"
+        )
 
     result = run(
         [
@@ -215,8 +261,8 @@ def verify_sigstore(path: Path, bundle: Path | None) -> bool:
             "sigstore",
             "verify",
             "identity",
-            "--cert-identity-regexp",
-            f"^https://github\\.com/{REPO_OWNER}/{REPO_NAME}/\\.github/workflows/release\\.yml@",
+            "--cert-identity",
+            san,
             "--cert-oidc-issuer",
             "https://token.actions.githubusercontent.com",
             "--bundle",
