@@ -1,3 +1,5 @@
+<!-- cadence: handoff-guard -->
+
 # CLAUDE.md
 
 ## Project Overview
