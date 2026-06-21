@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Opted the repo into the cadence handoff convention (`cadence: handoff-guard`
+  tag in CLAUDE.md).
+
 ## [0.0.2] - 2026-04-11
 
 ### Added
