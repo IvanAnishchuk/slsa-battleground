@@ -47,7 +47,7 @@ jobs:
 
       - name: Generate SBOM (CycloneDX)
         run: |
-          uv export --format requirements-txt --no-emit-project > requirements-release.txt
+          uv run python scripts/regen_requirements.py --stdout > requirements-release.txt
           uv tool run --from cyclonedx-bom cyclonedx-py requirements requirements-release.txt \
             --output-format json \
             --output-file dist/slsa-battleground-sbom.cdx.json
